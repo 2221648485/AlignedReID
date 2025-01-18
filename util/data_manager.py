@@ -36,7 +36,7 @@ class Market1501(object):
 
         self.train = train
         self.query = query
-        self.gallery = test
+        self.test = test
 
         self.num_train_pids = num_train_pids
         self.num_query_pids = num_query_pids
@@ -75,8 +75,8 @@ class Market1501(object):
         for img_path in img_paths:
             pid, _ = map(int, pattern.search(img_path).groups())
             pid_container.add(pid)
-        pid2label = {pid: label for label, pid in enumerate(pid_container)}
 
+        pid2label = {pid: label for label, pid in enumerate(pid_container)}
         dataset = []
         for img_path in img_paths:
             pid, camid = map(int, pattern.search(img_path).groups())
