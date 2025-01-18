@@ -94,6 +94,12 @@ class Market1501(object):
 img_factory = {
     "market1501": Market1501
 }
+vid_factory = {
+
+}
+
+def get_names():
+    return list(img_factory.keys()) + list(vid_factory.keys())
 
 def init_img_dataset(name, **kwargs):
     if name not in img_factory.keys():
