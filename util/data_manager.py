@@ -91,5 +91,11 @@ class Market1501(object):
         return dataset, num_pids, num_imgs
 
 
-if __name__ == "__main__":
-    dataset = Market1501()
+img_factory = {
+    "market1501": Market1501
+}
+
+def init_img_dataset(name, **kwargs):
+    if name not in img_factory.keys():
+        raise KeyError(f"Invalid dataset, got '{name}', but excepted to be one of {img_factory.keys()}")
+    return img_factory[name](**kwargs)
