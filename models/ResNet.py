@@ -17,7 +17,7 @@ class ResNet152(nn.Module):
         x = self.model(x)
         x = F.avg_pool2d(x, x.size()[2:])
         f = x.view(x.size(0), -1) # 展平
-        f = 1. * f / (torch.norm(f, 2, dim=-1, keepdim=True) + 1e-12) # 归一化
+        # f = 1. * f / (torch.norm(f, 2, dim=-1, keepdim=True) + 1e-12) # 归一化
         if not self.training:
             return f
         y = self.classifier(f)

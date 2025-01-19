@@ -4,7 +4,9 @@ import torch
 from IPython import embed
 from PIL import Image
 from torch.utils.data import Dataset
-import data_manager
+
+from util import data_manager
+
 
 def read_image(img_path):
     got_img = False

@@ -11,16 +11,16 @@ class Market1501(object):
     def __init__(self, root="../resource", **kwargs):
         self.dataset_dir = osp.join(root, self.dataset_dir)
         self.train_dir = osp.join(self.dataset_dir, "bounding_box_train")
-        self.test_dir = osp.join(self.dataset_dir, "bounding_box_test")
+        self.gallery_dir = osp.join(self.dataset_dir, "bounding_box_test")
         self.query_dir = osp.join(self.dataset_dir, "query")
 
         self.check_before_run()
         train, num_train_pids, num_train_imgs = self.process_dir(self.train_dir, relabel=True)
         query, num_query_pids, num_query_imgs = self.process_dir(self.query_dir)
-        test, num_test_pids, num_test_imgs = self.process_dir(self.test_dir)
+        gallery, num_gallery_pids, num_gallery_imgs = self.process_dir(self.gallery_dir)
 
-        num_total_pids = num_train_pids + num_query_pids + num_test_pids
-        num_total_imgs = num_train_imgs + num_query_imgs + num_test_imgs
+        num_total_pids = num_train_pids + num_query_pids + num_gallery_pids
+        num_total_imgs = num_train_imgs + num_query_imgs + num_gallery_imgs
 
         print("=> Market1501 loaded")
         print("Dataset statistics:")
@@ -29,18 +29,18 @@ class Market1501(object):
         print("  ------------------------------")
         print("  train    | {:5d} | {:8d}".format(num_train_pids, num_train_imgs))
         print("  query    | {:5d} | {:8d}".format(num_query_pids, num_query_imgs))
-        print("  test     | {:5d} | {:8d}".format(num_test_pids, num_test_imgs))
+        print("  gallery  | {:5d} | {:8d}".format(num_gallery_pids, num_gallery_imgs))
         print("  ------------------------------")
         print("  total    | {:5d} | {:8d}".format(num_total_pids, num_total_imgs))
         print("  ------------------------------")
 
         self.train = train
         self.query = query
-        self.test = test
+        self.gallery = gallery
 
         self.num_train_pids = num_train_pids
         self.num_query_pids = num_query_pids
-        self.num_test_pids = num_test_pids
+        self.num_gallery_pids = num_gallery_pids
 
     # 检查文件夹是否存在
     def check_before_run(self):
@@ -48,8 +48,8 @@ class Market1501(object):
             raise RuntimeError(f"{self.dataset_dir} is not available")
         if not osp.exists(self.train_dir):
             raise RuntimeError(f"{self.train_dir} is not available")
-        if not osp.exists(self.test_dir):
-            raise RuntimeError(f"{self.test_dir} is not available")
+        if not osp.exists(self.gallery_dir):
+            raise RuntimeError(f"{self.gallery_dir} is not available")
         if not osp.exists(self.query_dir):
             raise RuntimeError(f"{self.query_dir} is not available")
 
