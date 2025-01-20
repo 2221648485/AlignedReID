@@ -1,5 +1,7 @@
 import torch
+from pyexpat import features
 from torch import nn
+from IPython import embed
 
 from aligned.local_dist import hard_example_mining, batch_local_dist
 
@@ -79,7 +81,7 @@ class TripletLoss(nn.Module):
         # Compute pairwise distance, replace by the official when merged
         dist = torch.pow(inputs, 2).sum(dim=1, keepdim=True).expand(n, n)
         dist = dist + dist.t()
-        dist.addmm_(1, -2, inputs, inputs.t())
+        dist.addmm_(inputs, inputs.t(), beta=1, alpha=-2)
         dist = dist.clamp(min=1e-12).sqrt()  # for numerical stability
         # For each anchor, find the hardest positive and negative
         mask = targets.expand(n, n).eq(targets.expand(n, n).t())
@@ -144,3 +146,11 @@ class TripletLossAlignedReID(nn.Module):
         if self.mutual:
             return global_loss + local_loss, dist
         return global_loss, local_loss
+
+
+if __name__ == "__main__":
+    target = [1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8]
+    target = torch.Tensor(target)
+    features = torch.Tensor(32,2048)
+    a = TripletLoss()
+    a.forward(features, target)

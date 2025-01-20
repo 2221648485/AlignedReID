@@ -13,7 +13,7 @@ from torch import optim
 import models
 from util.dataset_loader import ImageDataset
 from util.eval_metrics import evaluate
-from util.losses import CrossEntropyLabelSmooth, TripletLossAlignedReID, DeepSupervision
+from util.losses import CrossEntropyLabelSmooth, TripletLossAlignedReID, DeepSupervision, TripletLoss
 from util.samplers import RandomIdentitySampler
 from util.utils import Logger, save_checkpoint, AverageMeter
 import os.path as osp
@@ -148,7 +148,7 @@ def main():
     else:
         criterion_class = CrossEntropyLoss()
         if use_gpu: criterion_class = criterion_class.cuda()
-    criterion_metric = TripletLossAlignedReID(margin=args.margin)
+    criterion_metric = TripletLoss(margin=args.margin)
     # 定义优化器
     optimizer = init_optim(args.optim, model.parameters(), args.lr, args.weight_decay)
     # 降低学习率
@@ -210,6 +210,8 @@ def main():
 def train(epoch, model, criterion_class, criterion_metric, optimizer, trainloader, use_gpu):
     model.train()
     losses = AverageMeter()
+    xent_losses = AverageMeter()
+    triplet_losses = AverageMeter()
     batch_time = AverageMeter()
     data_time = AverageMeter()
 
@@ -219,8 +221,10 @@ def train(epoch, model, criterion_class, criterion_metric, optimizer, trainloade
             imgs, pids = imgs.cuda(), pids.cuda()
         # measure data loading time
         data_time.update(time.time() - end)
-        outputs = model(imgs)
-        loss = criterion_class(outputs, pids)
+        outputs, features = model(imgs)
+        xent_loss = criterion_class(outputs, pids)
+        triplet_loss = criterion_metric(features, pids)
+        loss = xent_loss + triplet_loss
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -228,15 +232,19 @@ def train(epoch, model, criterion_class, criterion_metric, optimizer, trainloade
         batch_time.update(time.time() - end)
         end = time.time()
         losses.update(loss.item(), pids.size(0))
+        xent_losses.update(xent_loss.item(), pids.size(0))
+        triplet_losses.update(triplet_loss.item(), pids.size(0))
 
         if (batch_idx + 1) % args.print_freq == 0:
             print('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                  'CLoss {xent_loss.val:.4f} ({xent_loss.avg:.4f})\t'
+                  'MLoss {triplet_loss.val:.4f} ({triplet_loss.avg:.4f})\t'
             .format(
                 epoch + 1, batch_idx + 1, len(trainloader), batch_time=batch_time, data_time=data_time,
-                loss=losses))
+                loss=losses, xent_loss = xent_losses, triplet_loss = triplet_losses))
 
 
 def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20]):

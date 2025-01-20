@@ -74,12 +74,14 @@ class Market1501(object):
 
         for img_path in img_paths:
             pid, _ = map(int, pattern.search(img_path).groups())
+            if pid == -1: continue
             pid_container.add(pid)
 
         pid2label = {pid: label for label, pid in enumerate(pid_container)}
         dataset = []
         for img_path in img_paths:
             pid, camid = map(int, pattern.search(img_path).groups())
+            if pid == -1: continue
             assert 0 <= pid <= 1501
             assert 1 <= camid <= 6
             camid -= 1
@@ -98,8 +100,10 @@ vid_factory = {
 
 }
 
+
 def get_names():
     return list(img_factory.keys()) + list(vid_factory.keys())
+
 
 def init_img_dataset(name, **kwargs):
     if name not in img_factory.keys():
