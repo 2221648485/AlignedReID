@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 
 class ResNet152(nn.Module):
-    def __init__(self, num_classes, loss={'softmax, metric'}, **kwargs):
+    def __init__(self, num_classes, loss={"softmax"}, **kwargs):
         super().__init__()
         resnet = models.resnet152(weights=ResNet152_Weights.DEFAULT)
         self.loss = loss
@@ -15,6 +15,7 @@ class ResNet152(nn.Module):
         self.classifier = nn.Linear(2048, num_classes)
 
     def forward(self, x):
+        embed()
         x = self.model(x)
         x = F.avg_pool2d(x, x.size()[2:])
         f = x.view(x.size(0), -1) # 展平
@@ -26,7 +27,8 @@ class ResNet152(nn.Module):
             return y
         elif self.loss == {"metric"}:
             return f
-        elif self.loss == {"softmax", "metric"}:
+        elif self.loss == {"metric", "softmax"}:
+            print("!!!")
             return y, f
         else:
             print("loss setting error")
@@ -35,4 +37,5 @@ if __name__ == "__main__":
     model = ResNet152(num_classes=751)
     imgs = torch.Tensor(32, 3, 256, 128)
     f = model(imgs)
+    print(f.shape)
     embed()

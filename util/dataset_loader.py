@@ -38,5 +38,6 @@ class ImageDataset(Dataset):
 
 if __name__ == "__main__":
     dataset = data_manager.init_img_dataset(name="market1501")
-    train_loader = ImageDataset(dataset.train)
-    embed()
+    train_loader = ImageDataset(dataset.query)
+    for batch_idx, (imgs, pids, _) in enumerate(train_loader):
+        print(batch_idx)

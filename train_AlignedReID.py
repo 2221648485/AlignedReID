@@ -39,7 +39,7 @@ parser.add_argument('--split-id', type=int, default=0,
 # Optimization options
 parser.add_argument('--labelsmooth', action='store_true', help="label smooth")
 parser.add_argument('--optim', type=str, default='adam', help="optimization algorithm (see optimizers.py)")
-parser.add_argument('--max-epoch', default=300, type=int,
+parser.add_argument('--max-epoch', default=120, type=int,
                     help="maximum epochs to run")
 parser.add_argument('--start-epoch', default=0, type=int,
                     help="manual epoch number (useful on restarts)")
@@ -67,7 +67,7 @@ parser.add_argument('--print-freq', type=int, default=10, help="print frequency"
 parser.add_argument('--seed', type=int, default=1, help="manual seed")
 parser.add_argument('--resume', type=str, default='', metavar='PATH')
 parser.add_argument('--evaluate', action='store_true', help="evaluation only")
-parser.add_argument('--eval-step', type=int, default=-1,
+parser.add_argument('--eval-step', type=int, default=10,
                     help="run evaluation for every N epochs (set to -1 to test after training)")
 parser.add_argument('--start-eval', type=int, default=0, help="start to evaluate after specific epoch")
 parser.add_argument('--save-dir', type=str, default='log')
@@ -115,7 +115,7 @@ def main():
         v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     transforms_test = v2.Compose([
-        v2.Resize(args.height, args.width),
+        v2.Resize((args.height, args.width)),
         v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)]),
         v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
@@ -123,20 +123,21 @@ def main():
     # 装载数据集
     train_loader = DataLoader(
         ImageDataset(dataset.train, transform=transforms_train),
-        batch_size=args.train_batch, shuffle=False, num_workers=args.workers,
+        batch_size=args.train_batch, num_workers=args.workers,
         pin_memory=pin_memory, drop_last=True,
         sampler=RandomIdentitySampler(dataset.train, num_instances=args.num_instances))
-    queryloader = DataLoader(
+    query_loader = DataLoader(
         ImageDataset(dataset.query, transform=transforms_test),
         batch_size=args.test_batch, shuffle=False, num_workers=args.workers,
         pin_memory=pin_memory, drop_last=False,
     )
 
-    galleryloader = DataLoader(
+    gallery_loader = DataLoader(
         ImageDataset(dataset.gallery, transform=transforms_test),
         batch_size=args.test_batch, shuffle=False, num_workers=args.workers,
         pin_memory=pin_memory, drop_last=False,
     )
+
 
     print(f"Initializing model: {args.arch}")
     model = models.init_model(name=args.arch, num_classes=dataset.num_train_pids, loss={'softmax', 'metric'},
@@ -166,8 +167,9 @@ def main():
     # 测试
     if args.evaluate:
         print("Evaluate only")
-        test(model, queryloader, galleryloader, use_gpu)
+        test(model, query_loader, gallery_loader, use_gpu)
         return 0
+    test(model, query_loader, gallery_loader, use_gpu)
     start_time = time.time()
     train_time = 0
     best_rank1 = -np.inf
@@ -184,7 +186,7 @@ def main():
         if (epoch + 1) > args.start_eval and args.eval_step > 0 and (epoch + 1) % args.eval_step == 0 or (
                 epoch + 1) == args.max_epoch:
             print("==> Test")
-            rank1 = test(model, queryloader, galleryloader, use_gpu)
+            rank1 = test(model, query_loader, gallery_loader, use_gpu)
             is_best = rank1 > best_rank1
             if is_best:
                 best_rank1 = rank1
@@ -251,16 +253,13 @@ def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20]):
     batch_time = AverageMeter()
 
     model.eval()
-
     with torch.no_grad():
         qf, q_pids, q_camids, lqf = [], [], [], []
         for batch_idx, (imgs, pids, camids) in enumerate(queryloader):
             if use_gpu: imgs = imgs.cuda()
-
             end = time.time()
             features, local_features = model(imgs)
             batch_time.update(time.time() - end)
-
             features = features.data.cpu()
             local_features = local_features.data.cpu()
             qf.append(features)
