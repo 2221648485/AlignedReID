@@ -149,7 +149,7 @@ def main():
     else:
         criterion_class = CrossEntropyLoss()
         if use_gpu: criterion_class = criterion_class.cuda()
-    criterion_metric = TripletLoss(margin=args.margin)
+    criterion_metric = TripletLossAlignedReID(margin=args.margin)
     # 定义优化器
     optimizer = init_optim(args.optim, model.parameters(), args.lr, args.weight_decay)
     # 降低学习率
@@ -169,12 +169,11 @@ def main():
         print("Evaluate only")
         test(model, query_loader, gallery_loader, use_gpu)
         return 0
-    test(model, query_loader, gallery_loader, use_gpu)
     start_time = time.time()
     train_time = 0
     best_rank1 = -np.inf
     best_epoch = 0
-
+    test(model, query_loader, gallery_loader, use_gpu)
     # 开始训练
     print("==> Start training")
     for epoch in range(start_epoch, args.max_epoch):
@@ -191,7 +190,7 @@ def main():
             if is_best:
                 best_rank1 = rank1
                 best_epoch = epoch + 1
-            if use_gpu:
+            if use_gpu and torch.cuda.device_count() > 1:
                 state_dict = model.module.state_dict()
             else:
                 state_dict = model.state_dict()
@@ -212,21 +211,36 @@ def main():
 def train(epoch, model, criterion_class, criterion_metric, optimizer, trainloader, use_gpu):
     model.train()
     losses = AverageMeter()
-    xent_losses = AverageMeter()
-    triplet_losses = AverageMeter()
     batch_time = AverageMeter()
     data_time = AverageMeter()
+    xent_losses = AverageMeter()
+    global_losses = AverageMeter()
+    local_losses = AverageMeter()
 
     end = time.time()
     for batch_idx, (imgs, pids, _) in enumerate(trainloader):
         if use_gpu:
             imgs, pids = imgs.cuda(), pids.cuda()
+
         # measure data loading time
         data_time.update(time.time() - end)
-        outputs, features = model(imgs)
-        xent_loss = criterion_class(outputs, pids)
-        triplet_loss = criterion_metric(features, pids)
-        loss = xent_loss + triplet_loss
+        outputs, features, local_features = model(imgs)
+        if args.htri_only:
+            if isinstance(features, tuple):
+                global_loss, local_loss = DeepSupervision(criterion_metric, features, pids, local_features)
+            else:
+                global_loss, local_loss = criterion_metric(features, pids, local_features)
+        else:
+            if isinstance(outputs, tuple):
+                xent_loss = DeepSupervision(criterion_class, outputs, pids)
+            else:
+                xent_loss = criterion_class(outputs, pids)
+
+            if isinstance(features, tuple):
+                global_loss, local_loss = DeepSupervision(criterion_metric, features, pids, local_features)
+            else:
+                global_loss, local_loss = criterion_metric(features, pids, local_features)
+        loss = xent_loss + global_loss + local_loss
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -235,19 +249,19 @@ def train(epoch, model, criterion_class, criterion_metric, optimizer, trainloade
         end = time.time()
         losses.update(loss.item(), pids.size(0))
         xent_losses.update(xent_loss.item(), pids.size(0))
-        triplet_losses.update(triplet_loss.item(), pids.size(0))
+        global_losses.update(global_loss.item(), pids.size(0))
+        local_losses.update(local_loss.item(), pids.size(0))
 
-        if (batch_idx + 1) % args.print_freq == 0:
+        if (batch_idx+1) % args.print_freq == 0:
             print('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'CLoss {xent_loss.val:.4f} ({xent_loss.avg:.4f})\t'
-                  'MLoss {triplet_loss.val:.4f} ({triplet_loss.avg:.4f})\t'
-            .format(
-                epoch + 1, batch_idx + 1, len(trainloader), batch_time=batch_time, data_time=data_time,
-                loss=losses, xent_loss = xent_losses, triplet_loss = triplet_losses))
-
+                  'GLoss {global_loss.val:.4f} ({global_loss.avg:.4f})\t'
+                  'LLoss {local_loss.val:.4f} ({local_loss.avg:.4f})\t'.format(
+                   epoch+1, batch_idx+1, len(trainloader), batch_time=batch_time,data_time=data_time,
+                   loss=losses,xent_loss=xent_losses, global_loss=global_losses, local_loss = local_losses))
 
 def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20]):
     batch_time = AverageMeter()
@@ -302,7 +316,7 @@ def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20]):
     m, n = qf.size(0), gf.size(0)
     distmat = torch.pow(qf, 2).sum(dim=1, keepdim=True).expand(m, n) + \
               torch.pow(gf, 2).sum(dim=1, keepdim=True).expand(n, m).t()
-    distmat.addmm_(1, -2, qf, gf.t())
+    distmat.addmm_(qf, gf.t(), beta=1, alpha=-2)
     distmat = distmat.numpy()
 
     if not args.test_distance == 'global':
@@ -318,7 +332,7 @@ def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20]):
             print("Using global and local branches")
             distmat = local_distmat + distmat
     print("Computing CMC and mAP")
-    cmc, mAP = evaluate(distmat, q_pids, g_pids, q_camids, g_camids, use_metric_cuhk03=args.use_metric_cuhk03)
+    cmc, mAP = evaluate(distmat, q_pids, g_pids, q_camids, g_camids)
 
     print("Results ----------")
     print("mAP: {:.1%}".format(mAP))
@@ -346,7 +360,7 @@ def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20]):
                 print("Using global and local branches for reranking")
                 distmat = re_ranking(qf, gf, k1=20, k2=6, lambda_value=0.3, local_distmat=local_dist, only_local=False)
         print("Computing CMC and mAP for re_ranking")
-        cmc, mAP = evaluate(distmat, q_pids, g_pids, q_camids, g_camids, use_metric_cuhk03=args.use_metric_cuhk03)
+        cmc, mAP = evaluate(distmat, q_pids, g_pids, q_camids, g_camids)
 
         print("Results ----------")
         print("mAP(RK): {:.1%}".format(mAP))

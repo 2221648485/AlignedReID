@@ -126,8 +126,5 @@ def eval_market1501(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
 
     return all_cmc, mAP
 
-def evaluate(distmat, q_pids, g_pids, q_camids, g_camids, max_rank=50, use_metric_cuhk03=False):
-    if use_metric_cuhk03:
-        return eval_cuhk03(distmat, q_pids, g_pids, q_camids, g_camids, max_rank)
-    else:
+def evaluate(distmat, q_pids, g_pids, q_camids, g_camids, max_rank=50):
         return eval_market1501(distmat, q_pids, g_pids, q_camids, g_camids, max_rank)
